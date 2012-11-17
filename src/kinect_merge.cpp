@@ -183,8 +183,13 @@ int main(int argc, const char **argv) {
     std::vector<float> num_outliers_stats;
     std::vector<float> num_added_stats;
 
+    if(!boost::filesystem::exists("calib.yml")) {
+        std::cerr << "calib.yml does not exist" << std::endl;
+        exit(9);
+    }
+
     CHerreraCalibration calibration;
-    calibration.load("best_calib.yml");
+    calibration.load("calib.yml");
 
     boost::ptr_vector<CView> views;
     std::cout << "Loading views" << std::flush;

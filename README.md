@@ -7,8 +7,8 @@ Summary
 The program takes a sequence of registered frames captured with the Kinect depth
 camera and outputs a non-redundant point cloud. The algorithm uses covariance
 matrices to describe the directional variance of the measurements. It does not
-limit the captured area and it retains all captured detail. It is based on
-a paper by Merrell et al. [1].
+limit the captured area and it retains all captured detail. It is partly based
+on a paper by Merrell et al. [1].
 
 Process
 -------
@@ -79,8 +79,6 @@ The steps for building are:
 For additional debug file output, a debug build can be performed by specifying
 the `CMAKE_BUILD_TYPE` CMake variable (e.g. `cmake -D CMAKE_BUILD_TYPE=Debug` ../src).
 
-TODO: License
-
 Usage
 -----
 
@@ -94,6 +92,9 @@ parenthesis.
 
 The extrinsic parameters consist of the 3x3 camera rotation matrix R and
 the 3x1 camera translation matrix T in the OpenCV YAML format.
+
+The program requires calibration data to be found in a `calib.yml` file in the
+current directory.
 
 ### Command-line
 
@@ -115,4 +116,4 @@ connected to each other).
 References
 ----------
 
-    [1] Real-time visibility-based fusion of depth maps (P Merrell, A Akbarzadeh, L Wang..., 2007)
+[1] Real-time visibility-based fusion of depth maps (P Merrell, A Akbarzadeh, L Wang..., 2007)
