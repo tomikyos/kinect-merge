@@ -18,11 +18,19 @@ set(SRCS
     kinect_view.cpp
     kinect_calibration.cpp)
 
+IF(NOT CMAKE_BUILD_TYPE)
+    SET(CMAKE_BUILD_TYPE Release CACHE STRING
+        "The type of build. Options are: Debug Release RelWithDebInfo Profile"
+        FORCE)
+ENDIF(NOT CMAKE_BUILD_TYPE)
+
+SET(COMMON_FLAGS "-Wall -Wextra")
+
 if(CMAKE_COMPILER_IS_GNUCXX)
-    set(CMAKE_CXX_FLAGS "-Wall -Wextra")
-    set(CMAKE_CXX_FLAGS_RELEASE "-O3 -DNDEBUG")
-    set(CMAKE_CXX_FLAGS_DEBUG "-O0 -ggdb -DDEBUG")
-    set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O3 -ggdb -DNDEBUG")
+    set(CMAKE_CXX_FLAGS_RELEASE "${COMMON_FLAGS} -O3 -DNDEBUG")
+    set(CMAKE_CXX_FLAGS_DEBUG "${COMMON_FLAGS} -O0 -ggdb -DDEBUG")
+    set(CMAKE_CXX_FLAGS_PROFILE "${COMMON_FLAGS} -O3 -DNDEBUG -pg")
+    set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${COMMON_FLAGS} -O3 -ggdb -DNDEBUG")
 endif()
 
 add_executable (kinect_merge ${SRCS} ${INCS})
