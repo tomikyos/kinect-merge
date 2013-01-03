@@ -15,8 +15,18 @@ static const float SIMILARITY_THRESHOLD = 3; // in units of standard deviations
 
 CPoint::CPoint(const cv::Matx31f& position, const cv::Matx33f& covariance, const cv::Matx<unsigned char, 3, 1>& color) :
     pos(position),
-    col(color),
-    cov(covariance) {}
+    cov(covariance),
+    col_sum(color),
+    num_merged(1) {}
+
+cv::Matx<unsigned char, 3, 1> CPoint::get_color() const {
+    // NOTE: The following line would segfault on cv::Mat(col_sum). An alternate method follows.
+    // return cv::Mat(col_sum) / num_merged;
+    cv::Matx<unsigned char, 3, 1> m;
+    for(int i = 0; i < 3; i++)
+        m(i) = col_sum(i) / num_merged;
+    return m;
+}
 
 CView::CView(const std::string &extrinsic_file,
              const std::string &disparity_file,
@@ -299,11 +309,8 @@ static void refine_point(CPoint &existing_point, const CPoint &new_measurement) 
     // Update the existing point.
     existing_point.pos = estimate;
     existing_point.cov = new_covariance;
-
-    // Add the color components separately to avoid the saturating arithmetic.
-    existing_point.col(0) = (existing_point.col(0) + new_measurement.col(0)) * 0.5;
-    existing_point.col(1) = (existing_point.col(1) + new_measurement.col(1)) * 0.5;
-    existing_point.col(2) = (existing_point.col(2) + new_measurement.col(2)) * 0.5;
+    existing_point.col_sum += new_measurement.col_sum;
+    existing_point.num_merged++;
 }
 
 void CView::refine_points(CView &connected_view, const std::vector<std::vector<bool> > &measurement_accepted, std::vector<std::vector<bool> > &measurement_used) const {

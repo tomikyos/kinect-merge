@@ -135,8 +135,11 @@ static void output_point_cloud(const std::vector<point_ptr> &point_cloud, const 
         }
 
         point_ptr p = point_cloud[i];
+        cv::Matx<unsigned char, 3, 1> color = p->get_color();
         ply_file << p->pos(0) << " " << p->pos(1) << " " << p->pos(2) << " ";
-        ply_file << static_cast<int>(p->col(2)) << " " << static_cast<int>(p->col(1)) << " " << static_cast<int>(p->col(0)) << std::endl;
+        ply_file << static_cast<int>(color(2)) << " "
+                 << static_cast<int>(color(1)) << " "
+                 << static_cast<int>(color(0)) << std::endl;
 
         if(!ply_file) {
             std::cerr << "Error writing point cloud" << std::endl;

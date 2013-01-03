@@ -22,8 +22,11 @@ struct CPoint {
     CPoint(const cv::Matx31f& position, const cv::Matx33f& covariance, const cv::Matx<unsigned char, 3, 1>& color);
 
     cv::Matx31f pos; // Position
-    cv::Matx<unsigned char, 3, 1> col; // Color
     cv::Matx33f cov; // Covariance matrix
+    cv::Matx<unsigned int, 3, 1> col_sum; // Color sum
+    unsigned int num_merged; // Number of points included in the color sum.
+
+    cv::Matx<unsigned char, 3, 1> get_color() const;
 };
 
 class CView {
