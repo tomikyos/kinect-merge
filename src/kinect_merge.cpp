@@ -211,7 +211,7 @@ int main(int argc, const char **argv) {
         // Output all the points overlayed in one cloud.
         std::vector<CPoint::const_ptr> overlayed_point_cloud;
         std::cout << "Overlaying point clouds" << std::endl;
-        for(unsigned int i = 0; i < views.size(); i++) {
+        for(unsigned int i = ADJACENCY_SIZE; i < views.size() - ADJACENCY_SIZE; i++) {
             print_progress(i, views.size());
             views[i].insert_into_point_cloud(overlayed_point_cloud);
         }
@@ -292,24 +292,42 @@ int main(int argc, const char **argv) {
             depthmap_filename << "depthmap-" << view_idx << ".png";
             cv::imwrite(depthmap_filename.str(), depthmap);
 
-            // Output images showing which points were rejected as outliers.
+            // Output images showing the state of each point.
 
-            cv::Matx<float, IMAGE_HEIGHT, IMAGE_WIDTH> accepted;
+            cv::Mat state(IMAGE_HEIGHT, IMAGE_WIDTH, CV_8UC3);
             for(int v = 0; v < IMAGE_HEIGHT; v++) {
                 for(int u = 0; u < IMAGE_WIDTH; u++) {
-                    float color;
+                    cv::Vec3b color; // in BGR format
                     if(view.has_measurement(u, v)) {
-                        color = view.measurement_accepted[v][u] ? 255 : 0;
+                        if(view.measurement_used[v][u]) {
+                            // The point was used to refine an existing point.
+                            color[0] = 128;
+                            color[1] = 255;
+                            color[2] = 128;
+                        } else if(view.measurement_accepted[v][u]) {
+                            // The point was added to the cloud.
+                            color[0] = 255;
+                            color[1] = 128;
+                            color[2] = 128;
+                        } else {
+                            // The point was an outlier.
+                            color[0] = 128;
+                            color[1] = 128;
+                            color[2] = 255;
+                        }
                     } else {
-                        color = 128;
+                        // There was no measurement for the pixel.
+                        color[0] = 213;
+                        color[1] = 213;
+                        color[2] = 213;
                     }
-                    accepted(v, u) = color;
+                    state.at<cv::Vec3b>(v, u) = color;
                 }
             }
 
-            std::ostringstream accepted_filename;
-            accepted_filename<< "accepted-" << view_idx << ".png";
-            cv::imwrite(accepted_filename.str(), accepted);
+            std::ostringstream state_filename;
+            state_filename<< "state-" << view_idx << ".png";
+            cv::imwrite(state_filename.str(), state);
         }
 #endif
     }

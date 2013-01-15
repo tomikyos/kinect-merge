@@ -37,9 +37,10 @@ CView::CView(const std::string &extrinsic_file,
     pointmap(boost::extents[IMAGE_HEIGHT][IMAGE_WIDTH]),
     num_missing(0),
     num_outliers(0),
-#ifdef DEBUG // The measurement acceptance is used for outputting debug images.
+#ifdef DEBUG // These are used for outputting debug images.
     num_added(0),
-    measurement_accepted(IMAGE_HEIGHT) {
+    measurement_accepted(IMAGE_HEIGHT),
+    measurement_used(IMAGE_HEIGHT) {
 #else
     num_added(0) {
 #endif
@@ -385,8 +386,8 @@ void CView::merge(boost::ptr_vector<CView> views,
 #ifndef DEBUG
     // Use a local variable instead of a member variable.
     std::vector<std::vector<bool> > measurement_accepted(IMAGE_HEIGHT);
-#endif
     std::vector<std::vector<bool> > measurement_used(IMAGE_HEIGHT);
+#endif
     for(int v = 0; v < IMAGE_HEIGHT; v++) {
         measurement_accepted[v].resize(IMAGE_WIDTH);
         measurement_used[v].resize(IMAGE_WIDTH);

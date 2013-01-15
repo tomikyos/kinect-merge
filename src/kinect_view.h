@@ -103,8 +103,9 @@ private:
 
 #ifdef DEBUG
 public:
-    // The measurement acceptance is used for outputting debug images.
+    // These are used for outputting debug images.
     std::vector<std::vector<bool> > measurement_accepted;
+    std::vector<std::vector<bool> > measurement_used;
 #endif
 };
 
