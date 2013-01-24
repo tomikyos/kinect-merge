@@ -19,6 +19,7 @@ struct CPoint {
     typedef boost::shared_ptr<CPoint> ptr;
     typedef boost::shared_ptr<const CPoint> const_ptr;
 
+    CPoint();
     CPoint(const cv::Matx31f& position, const cv::Matx33f& covariance, const cv::Matx<unsigned char, 3, 1>& color);
 
     cv::Matx31f pos; // Position

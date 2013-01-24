@@ -13,6 +13,8 @@ namespace kinect_merge {
 // similar enough to be merged.
 static const float SIMILARITY_THRESHOLD = 3; // in units of standard deviations
 
+CPoint::CPoint() {}
+
 CPoint::CPoint(const cv::Matx31f& position, const cv::Matx33f& covariance, const cv::Matx<unsigned char, 3, 1>& color) :
     pos(position),
     cov(covariance),
@@ -153,9 +155,8 @@ void CView::to_image_plane(const cv::Matx41f &local_pos, int &uc, int &vc) const
     vc = cf(1) + 0.5;
 }
 
-static float calculate_mahalanobis_distance(const CPoint &a, const CPoint &b) {
-    cv::Matx33f cov_mean = (a.cov + b.cov) * 0.5;
-    cv::Matx<float, 1, 1> operand = (a.pos - b.pos).t() * cov_mean.inv() * (a.pos - b.pos);
+static float calculate_mahalanobis_distance(const CPoint &estimate, const CPoint &p) {
+    cv::Matx<float, 1, 1> operand = (p.pos - estimate.pos).t() * p.cov.inv() * (p.pos - estimate.pos);
     return sqrt(operand(0));
 }
 
@@ -170,7 +171,7 @@ void CView::reject_outliers(boost::ptr_vector<CView> views,
         }
     }
 
-    // Project adjacent views into the reference view to calculate the number of occlusions for each pixel.
+    // Project adjacent views into the current view to calculate the number of occlusions for each pixel.
     for(unsigned int adjacent_idx = view_idx - ADJACENCY_SIZE;
         adjacent_idx <= view_idx + ADJACENCY_SIZE;
         adjacent_idx++) {
@@ -187,7 +188,7 @@ void CView::reject_outliers(boost::ptr_vector<CView> views,
                     continue;
                 }
 
-                // Project the point onto the reference view image plane.
+                // Project the point onto the current view image plane.
                 int proj_u, proj_v;
                 float proj_depth;
                 const CPoint &adjacent_view_point = adjacent_view.get_original_point(u, v);
@@ -199,11 +200,11 @@ void CView::reject_outliers(boost::ptr_vector<CView> views,
                 }
 
                 if(has_measurement(proj_u, proj_v)) {
-                    const CPoint &reference_view_point = get_original_point(proj_u, proj_v);
+                    const CPoint &current_view_point = get_original_point(proj_u, proj_v);
                     float distance = calculate_mahalanobis_distance(adjacent_view_point,
-                                                                    reference_view_point);
+                                                                    current_view_point);
                     if(distance > SIMILARITY_THRESHOLD && proj_depth < get_depth(proj_u, proj_v)) {
-                        // The projected point occludes a pixel in the reference view.
+                        // The projected point occludes a pixel in the current view.
                         measurement_stability[proj_v][proj_u]++;
                     }
                 }
@@ -211,7 +212,7 @@ void CView::reject_outliers(boost::ptr_vector<CView> views,
         }
     }
 
-    // Project the reference view into the adjacent views to count the number of free-space
+    // Project the current view into the adjacent views to count the number of free-space
     // violations for each pixel.
     for(int v = 0; v < IMAGE_HEIGHT; v++) {
         for(int u = 0; u < IMAGE_WIDTH; u++) {
@@ -236,8 +237,8 @@ void CView::reject_outliers(boost::ptr_vector<CView> views,
 
                 int proj_u, proj_v;
                 float proj_depth;
-                const CPoint &reference_view_point = get_original_point(u, v);
-                adjacent_view.project(reference_view_point, proj_u, proj_v, proj_depth);
+                const CPoint &current_view_point = get_original_point(u, v);
+                adjacent_view.project(current_view_point, proj_u, proj_v, proj_depth);
 
                 if(proj_depth < 0) {
                     // The point projects outside the image plane.
@@ -266,7 +267,7 @@ void CView::reject_outliers(boost::ptr_vector<CView> views,
 }
 
 // Calculate a new estimate for an existing point given a new measurement.
-static void refine_point(CPoint &existing_point, const CPoint &new_measurement) {
+static void calculate_estimate(const CPoint &existing_point, const CPoint &new_measurement, CPoint &estimate) {
     // Combine the inverses of the covariance matrices into one block diagonal matrix.
 
     cv::Mat inv_c = cv::Mat_<float>::zeros(6, 6);
@@ -302,26 +303,26 @@ static void refine_point(CPoint &existing_point, const CPoint &new_measurement) 
     r(5) = new_measurement.pos(2);
 
     // Calculate the refined estimate.
-    cv::Mat estimate = (h.t() * inv_c * h).inv() * h.t() * inv_c * r;
+    estimate.pos = cv::Mat((h.t() * inv_c * h).inv() * h.t() * inv_c * r);
 
     // Combine the covariance matrices.
-    cv::Matx33f new_covariance = (existing_point.cov.inv() + new_measurement.cov.inv()).inv();
+    estimate.cov = (existing_point.cov.inv() + new_measurement.cov.inv()).inv();
 
-    // Update the existing point.
-    existing_point.pos = estimate;
-    existing_point.cov = new_covariance;
-    existing_point.col_sum += new_measurement.col_sum;
-    existing_point.num_merged++;
+    // Add the color values.
+    estimate.col_sum = existing_point.col_sum + new_measurement.col_sum;
+    estimate.num_merged = existing_point.num_merged + new_measurement.num_merged;
 }
 
-void CView::refine_points(CView &connected_view, const std::vector<std::vector<bool> > &measurement_accepted, std::vector<std::vector<bool> > &measurement_used) const {
+void CView::refine_points(CView &connected_view,
+                          const std::vector<std::vector<bool> > &measurement_accepted,
+                          std::vector<std::vector<bool> > &measurement_used) const {
     for(int v = 0; v < IMAGE_HEIGHT; v++) {
         for(int u = 0; u < IMAGE_WIDTH; u++) {
             if(!connected_view.has_point(u, v)) {
                 continue;
             }
 
-            // Project the point onto the reference view image plane.
+            // Project the point onto the current view image plane.
             int proj_u, proj_v;
             float proj_depth;
             CPoint &connected_view_point = connected_view.get_point(u, v);
@@ -332,16 +333,20 @@ void CView::refine_points(CView &connected_view, const std::vector<std::vector<b
                 continue;
             }
 
-            if(!measurement_accepted[proj_v][proj_u]) {
+            if(!has_measurement(proj_u, proj_v) || !measurement_accepted[proj_v][proj_u]) {
                 // There is nothing to merge with at this pixel.
                 continue;
             }
 
             // Refine the existing point if it projects close enough.
-            const CPoint &reference_view_point = get_original_point(proj_u, proj_v);
-            float distance = calculate_mahalanobis_distance(connected_view_point, reference_view_point);
-            if(distance < SIMILARITY_THRESHOLD) {
-                refine_point(connected_view_point, reference_view_point);
+            // TODO: Don't update the covariance matrix until actual refinement?
+            // TODO: Don't update the estimated color until actual refinement?
+            const CPoint &current_view_point = get_original_point(proj_u, proj_v);
+            CPoint estimate;
+            calculate_estimate(connected_view_point, current_view_point, estimate);
+            if(calculate_mahalanobis_distance(estimate, connected_view_point) < SIMILARITY_THRESHOLD &&
+               calculate_mahalanobis_distance(estimate, current_view_point) < SIMILARITY_THRESHOLD) {
+                connected_view_point = estimate;
                 measurement_used[proj_v][proj_u] = true;
             }
         }
@@ -399,7 +404,7 @@ void CView::merge(boost::ptr_vector<CView> views,
 
     reject_outliers(views, view_idx, measurement_accepted);
 
-    // Project all connected views into the reference view to find points to be refined.
+    // Project all connected views into the current view to find points to be refined.
     for(unsigned int connected_idx = 0; connected_idx < view_idx; connected_idx++) {
         if(!view_connectivity.at<bool>(view_idx, connected_idx)) {
             // The view is not connected. Skip it.
