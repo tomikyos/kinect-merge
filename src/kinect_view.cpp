@@ -13,6 +13,9 @@ namespace kinect_merge {
 // similar enough to be merged.
 static const float SIMILARITY_THRESHOLD = 3; // in units of standard deviations
 
+// Stability threshold for outlier rejection
+static const int OUTLIER_THRESHOLD = 3;
+
 CPoint::CPoint() {}
 
 CPoint::CPoint(const cv::Matx31f& position, const cv::Matx33f& covariance, const cv::Matx<unsigned char, 3, 1>& color) :
@@ -217,7 +220,6 @@ void CView::reject_outliers(boost::ptr_vector<CView> views,
     for(int v = 0; v < IMAGE_HEIGHT; v++) {
         for(int u = 0; u < IMAGE_WIDTH; u++) {
             if(!has_measurement(u, v)) {
-                measurement_accepted[v][u] = false;
                 num_missing++;
                 continue;
             }
@@ -247,19 +249,19 @@ void CView::reject_outliers(boost::ptr_vector<CView> views,
 
                 if(adjacent_view.has_measurement(proj_u, proj_v)) {
                     const CPoint &adjacent_view_point = adjacent_view.get_original_point(proj_u, proj_v);
-                    float distance = calculate_mahalanobis_distance(reference_view_point,
+                    float distance = calculate_mahalanobis_distance(current_view_point,
                                                                     adjacent_view_point);
                     if(distance > SIMILARITY_THRESHOLD && proj_depth < adjacent_view.get_depth(proj_u, proj_v)) {
                         // There is a free-space violation.
                         stability--;
                     }
+                }
 
-                    if(stability < 0) {
-                        // The reference view measurement is unstable and therefore an outlier.
-                        measurement_accepted[v][u] = false;
-                        num_outliers++;
-                        break;
-                    }
+                if(abs(stability) >= OUTLIER_THRESHOLD) {
+                    // The current view measurement is unstable and therefore an outlier.
+                    measurement_accepted[v][u] = false;
+                    num_outliers++;
+                    break;
                 }
             }
         }
@@ -421,7 +423,7 @@ void CView::merge(boost::ptr_vector<CView> views,
     // Add all the points that weren't used to refine existing points to the point cloud.
     for(int v = 0; v < IMAGE_HEIGHT; v++) {
         for(int u = 0; u < IMAGE_WIDTH; u++) {
-            if(measurement_accepted[v][u] && !measurement_used[v][u]) {
+            if(has_measurement(u, v) && measurement_accepted[v][u] && !measurement_used[v][u]) {
                 // Make a copy of the original point.
                 pointmap[v][u] = boost::make_shared<CPoint>(*original_pointmap[v][u]);
                 global_point_cloud.push_back(pointmap[v][u]);
