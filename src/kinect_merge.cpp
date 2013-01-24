@@ -225,12 +225,20 @@ int main(int argc, const char **argv) {
         }
     }
 
+    unsigned int first_view = outlier_rejection ? ADJACENCY_SIZE : 0;
+    unsigned int last_view = outlier_rejection ? views.size() - ADJACENCY_SIZE : views.size();
+
     if(debug) {
         // Output all the points overlayed in one cloud.
         std::vector<CPoint::const_ptr> overlayed_point_cloud;
         std::cout << "Overlaying point clouds" << std::endl;
-        for(unsigned int i = ADJACENCY_SIZE; i < views.size() - ADJACENCY_SIZE; i++) {
-            print_progress(i, views.size());
+
+        for(unsigned int i = first_view; i < last_view; i++) {
+            if(outlier_rejection) {
+                print_progress(i - ADJACENCY_SIZE, views.size() - 2 * ADJACENCY_SIZE);
+            } else {
+                print_progress(i, views.size());
+            }
             views[i].insert_into_point_cloud(overlayed_point_cloud);
         }
         output_point_cloud<CPoint::const_ptr>(overlayed_point_cloud, "overlayed.ply");
@@ -265,9 +273,6 @@ int main(int argc, const char **argv) {
                   << " instead of " << views.size() << "x" << views.size() << std::endl;
         exit(8);
     }
-
-    unsigned int first_view = outlier_rejection ? ADJACENCY_SIZE : 0;
-    unsigned int last_view = outlier_rejection ? views.size() - ADJACENCY_SIZE : views.size();
 
     std::cout << "Merging views" << std::endl;
     std::vector<CPoint::ptr> global_point_cloud;
