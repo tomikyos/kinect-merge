@@ -233,7 +233,6 @@ void CView::reject_outliers(boost::ptr_vector<CView> views,
     for(int v = 0; v < IMAGE_HEIGHT; v++) {
         for(int u = 0; u < IMAGE_WIDTH; u++) {
             if(!has_measurement(u, v)) {
-                num_missing++;
                 continue;
             }
 
@@ -436,11 +435,16 @@ void CView::merge(boost::ptr_vector<CView> views,
     // Add all the points that weren't used to refine existing points to the point cloud.
     for(int v = 0; v < IMAGE_HEIGHT; v++) {
         for(int u = 0; u < IMAGE_WIDTH; u++) {
-            if(has_measurement(u, v) && measurement_accepted[v][u] && !measurement_used[v][u]) {
-                // Make a copy of the original point.
-                pointmap[v][u] = boost::make_shared<CPoint>(*original_pointmap[v][u]);
-                global_point_cloud.push_back(pointmap[v][u]);
-                num_added++;
+            if(has_measurement(u, v)) {
+                if(measurement_accepted[v][u] && !measurement_used[v][u]) {
+                    // Insert a copy into the point cloud since the original will be used for
+                    // outlier rejection.
+                    pointmap[v][u] = boost::make_shared<CPoint>(*original_pointmap[v][u]);
+                    global_point_cloud.push_back(pointmap[v][u]);
+                    num_added++;
+                }
+            } else {
+                num_missing++;
             }
         }
     }
