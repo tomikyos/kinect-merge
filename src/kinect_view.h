@@ -62,6 +62,7 @@ public:
     void merge(boost::ptr_vector<CView> views,
                unsigned int view_idx,
                const cv::Mat view_connectivity,
+               bool outlier_rejection,
                std::vector<CPoint::ptr> &global_point_cloud);
 
     // Statistics

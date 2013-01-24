@@ -380,10 +380,10 @@ void CView::project(const CPoint &global_point, int &proj_u, int &proj_v, float 
     }
 }
 
-
 void CView::merge(boost::ptr_vector<CView> views,
                   unsigned int view_idx,
                   const cv::Mat view_connectivity,
+                  bool outlier_rejection,
                   std::vector<CPoint::ptr> &global_point_cloud) {
     // Initialize vectors.
     // A measurement is marked as accepted if it is not an outlier.
@@ -402,7 +402,9 @@ void CView::merge(boost::ptr_vector<CView> views,
         }
     }
 
-    reject_outliers(views, view_idx, measurement_accepted);
+    if(outlier_rejection) {
+        reject_outliers(views, view_idx, measurement_accepted);
+    }
 
     // Project all connected views into the current view to find points to be refined.
     for(unsigned int connected_idx = 0; connected_idx < view_idx; connected_idx++) {
