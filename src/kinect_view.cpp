@@ -4,6 +4,7 @@
 #include <boost/ptr_container/ptr_vector.hpp>
 #include <algorithm>
 #include <fstream>
+#include <cmath>
 
 #include "kinect_view.h"
 
@@ -15,6 +16,13 @@ static const float SIMILARITY_THRESHOLD = 3; // in units of standard deviations
 
 // Stability threshold for outlier rejection
 static const int OUTLIER_THRESHOLD = 3;
+
+// Measurement variance constants
+static const double ALPHA_0 = 0.0032225;
+static const double ALPHA_1 = -0.0020925;
+static const double ALPHA_2 = 0.0022078;
+static const double BETA_X = 0.0017228;
+static const double BETA_Y = 0.0017092;
 
 CPoint::CPoint() {}
 
@@ -36,6 +44,8 @@ cv::Matx<unsigned char, 3, 1> CPoint::get_color() const {
 CView::CView(const std::string &extrinsic_file,
              const std::string &disparity_file,
              const std::string &color_file,
+             float covariance_scale_xy,
+             float covariance_scale_z,
              CKinectCalibration &calibration_) :
     calibration(calibration_),
     original_pointmap(boost::extents[IMAGE_HEIGHT][IMAGE_WIDTH]),
@@ -123,9 +133,12 @@ CView::CView(const std::string &extrinsic_file,
 
             // Calculate the covariance matrix.
             covariance = cv::Mat_<float>::eye(3, 3);
-            covariance.at<float>(0, 0) = 0.0019 * depth / 3;
-            covariance.at<float>(1, 1) = 0.0019 * depth / 3;
-            covariance.at<float>(2, 2) = 0.0022078 * depth * depth - 0.0020925 * depth + 0.0032225;
+            covariance.at<float>(0, 0) = BETA_X * BETA_X * depth * depth / 12;
+            covariance.at<float>(1, 1) = BETA_Y * BETA_Y * depth * depth / 12;
+            covariance.at<float>(2, 2) = pow(ALPHA_2 * depth * depth + ALPHA_1 * depth + ALPHA_0, 2);
+            covariance.at<float>(0, 0) *= covariance_scale_xy;
+            covariance.at<float>(1, 1) *= covariance_scale_xy;
+            covariance.at<float>(2, 2) *= covariance_scale_z;
 
             // Convert the covariance matrix to the global reference frame.
             covariance = rotation * covariance * inv_rotation;

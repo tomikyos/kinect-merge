@@ -39,7 +39,12 @@ static void parse_options(int argc, const char **argv, po::variables_map &vm) {
     po::options_description desc;
     desc.add_options()
         ("help,h",              "display this help and exit")
-        ("connectivity,c",      boost::program_options::value<std::string>(), "OpenCV YAML file containing the view connectivity matrix C")
+        ("covscalexy,sxy",      boost::program_options::value<float>()->default_value(DEFAULT_COVARIANCE_SCALE_XY),
+                                "scale factor for measurement x- and y-variances")
+        ("covscalez,sz",        boost::program_options::value<float>()->default_value(DEFAULT_COVARIANCE_SCALE_Z),
+                                "scale factor for measurement z-variance")
+        ("connectivity,c",      boost::program_options::value<std::string>(),
+                                "OpenCV YAML file containing the view connectivity matrix C")
         ("outlierrejection,o",  "enable outlier rejection")
         ("debug,d",             "output debug files")
         ("capture_dir",         "directory to read the capture data from")
@@ -68,6 +73,8 @@ static void parse_options(int argc, const char **argv, po::variables_map &vm) {
 // The color image file can alternatively be named 0000-c1.ppm.
 static void load_views(const std::string &capture_dir,
                        boost::ptr_vector<CView> &views,
+                       float covariance_scale_xy,
+                       float covariance_scale_z,
                        CKinectCalibration &calibration) {
     int view_idx = 0;
     while(true) {
@@ -97,7 +104,12 @@ static void load_views(const std::string &capture_dir,
             break;
         }
 
-        views.push_back(new CView(extrinsic_file, disparity_file, color_file, calibration));
+        views.push_back(new CView(extrinsic_file,
+                                  disparity_file,
+                                  color_file,
+                                  covariance_scale_xy,
+                                  covariance_scale_z,
+                                  calibration));
         std::cout << "." << std::flush; // Progress output
         view_idx++;
     }
@@ -179,6 +191,8 @@ int main(int argc, const char **argv) {
     bool debug = vm.count("debug");
     std::string capture_dir = vm["capture_dir"].as<std::string>();
     std::string output_file = vm["output_file"].as<std::string>();
+    float covariance_scale_xy = vm["covscalexy"].as<float>();
+    float covariance_scale_z = vm["covscalez"].as<float>();
     bool outlier_rejection = vm.count("outlierrejection");
 
     // Statistics variables
@@ -199,7 +213,7 @@ int main(int argc, const char **argv) {
     boost::ptr_vector<CView> views;
     std::cout << "Loading views" << std::flush;
     boost::timer timer;
-    load_views(capture_dir, views, calibration);
+    load_views(capture_dir, views, covariance_scale_xy, covariance_scale_z, calibration);
     time_loading_stat = timer.elapsed();
     std::cout << views.size() << " views" << std::endl;
 

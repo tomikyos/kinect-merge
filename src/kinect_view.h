@@ -14,6 +14,8 @@ using kinect_capture::CKinectCalibration;
 static const int IMAGE_WIDTH = 640;
 static const int IMAGE_HEIGHT = 480;
 static const int ADJACENCY_SIZE = 2;
+static const float DEFAULT_COVARIANCE_SCALE_XY = 40.0f;
+static const float DEFAULT_COVARIANCE_SCALE_Z = 20.0f;
 
 struct CPoint {
     typedef boost::shared_ptr<CPoint> ptr;
@@ -21,13 +23,12 @@ struct CPoint {
 
     CPoint();
     CPoint(const cv::Matx31f& position, const cv::Matx33f& covariance, const cv::Matx<unsigned char, 3, 1>& color);
+    cv::Matx<unsigned char, 3, 1> get_color() const;
 
     cv::Matx31f pos; // Position
     cv::Matx33f cov; // Covariance matrix
     cv::Matx<unsigned int, 3, 1> col_sum; // Color sum
     unsigned int num_merged; // Number of points included in the color sum.
-
-    cv::Matx<unsigned char, 3, 1> get_color() const;
 };
 
 class CView {
@@ -35,6 +36,8 @@ public:
     CView(const std::string &exstrinsic_file,
           const std::string &disparity_file,
           const std::string &color_file,
+          float covariance_scale_xy,
+          float covariance_scale_z,
           CKinectCalibration& calibration);
 
     // Does the original depthmap have a measurement at the given pixel?
