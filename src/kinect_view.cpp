@@ -12,17 +12,17 @@ namespace kinect_merge {
 
 // This is used for deciding whether two points are similar enough to not be considered outliers or
 // similar enough to be merged.
-static const float SIMILARITY_THRESHOLD = 3; // in units of standard deviations
+static const float SIMILARITY_THRESHOLD = 3.0f; // in units of standard deviations
 
 // Stability threshold for outlier rejection
 static const int OUTLIER_THRESHOLD = 3;
 
 // Measurement variance constants
-static const double ALPHA_0 = 0.0032225;
-static const double ALPHA_1 = -0.0020925;
-static const double ALPHA_2 = 0.0022078;
-static const double BETA_X = 0.0017228;
-static const double BETA_Y = 0.0017092;
+static const float ALPHA_0 = 0.0032225f;
+static const float ALPHA_1 = -0.0020925f;
+static const float ALPHA_2 = 0.0022078f;
+static const float BETA_X = 0.0017228f;
+static const float BETA_Y = 0.0017092f;
 
 CPoint::CPoint() {}
 
@@ -280,51 +280,19 @@ void CView::reject_outliers(boost::ptr_vector<CView> views,
     }
 }
 
-// Calculate a new estimate for an existing point given a new measurement.
-static void calculate_estimate(const CPoint &existing_point, const CPoint &new_measurement, CPoint &estimate) {
-    // Combine the inverses of the covariance matrices into one block diagonal matrix.
-
-    cv::Mat inv_c = cv::Mat_<float>::zeros(6, 6);
-    cv::Mat block;
-    cv::Mat inv;
-
-    block = cv::Mat(inv_c, cv::Rect(0, 0, 3, 3));
-    inv = cv::Mat(existing_point.cov.inv());
-    inv.copyTo(block);
-
-    block = cv::Mat(inv_c, cv::Rect(3, 3, 3, 3));
-    inv = cv::Mat(new_measurement.cov.inv());
-    inv.copyTo(block);
-
-    // Initialize the H matrix to repeating 3x3 identity matrices.
-    cv::Mat h = (cv::Mat_<float>(6, 3) << 1, 0, 0,
-                                          0, 1, 0,
-                                          0, 0, 1,
-                                          1, 0, 0,
-                                          0, 1, 0,
-                                          0, 0, 1);
-
-    // Combine the point positions into a single column vector.
-
-    cv::Mat_<float> r(6, 1);
-
-    r(0) = existing_point.pos(0);
-    r(1) = existing_point.pos(1);
-    r(2) = existing_point.pos(2);
-
-    r(3) = new_measurement.pos(0);
-    r(4) = new_measurement.pos(1);
-    r(5) = new_measurement.pos(2);
-
-    // Calculate the refined estimate.
-    estimate.pos = cv::Mat((h.t() * inv_c * h).inv() * h.t() * inv_c * r);
+// Calculate a new position estimate, covariance matrix and color for an existing point given a new measurement.
+static void refine_point(const CPoint &existing_point, const CPoint &new_measurement, CPoint &refined_point) {
+    cv::Matx33f new_measurement_cov_inv = new_measurement.cov.inv();
 
     // Combine the covariance matrices.
-    estimate.cov = (existing_point.cov.inv() + new_measurement.cov.inv()).inv();
+    refined_point.cov = (existing_point.cov.inv() + new_measurement_cov_inv).inv();
+
+    // Calculate the refined position estimate.
+    refined_point.pos = existing_point.pos + estimate.cov * new_measurement_cov_inv * (new_measurement.pos - existing_point.pos);
 
     // Add the color values.
-    estimate.col_sum = existing_point.col_sum + new_measurement.col_sum;
-    estimate.num_merged = existing_point.num_merged + new_measurement.num_merged;
+    refined_point.col_sum = existing_point.col_sum + new_measurement.col_sum;
+    refined_point.num_merged = existing_point.num_merged + new_measurement.num_merged;
 }
 
 void CView::refine_points(CView &connected_view,
@@ -352,15 +320,15 @@ void CView::refine_points(CView &connected_view,
                 continue;
             }
 
-            // Refine the existing point if it projects close enough.
-            // TODO: Don't update the covariance matrix until actual refinement?
-            // TODO: Don't update the estimated color until actual refinement?
             const CPoint &current_view_point = get_original_point(proj_u, proj_v);
-            CPoint estimate;
-            calculate_estimate(connected_view_point, current_view_point, estimate);
-            if(calculate_mahalanobis_distance(estimate, connected_view_point) < SIMILARITY_THRESHOLD &&
-               calculate_mahalanobis_distance(estimate, current_view_point) < SIMILARITY_THRESHOLD) {
-                connected_view_point = estimate;
+
+            // Calculate the refined point and use it if it's close enough to the existing point and
+            // new measurement.
+            CPoint refined_point;
+            refine_point(connected_view_point, current_view_point, refined_point);
+            if(calculate_mahalanobis_distance(refined_point, connected_view_point) < SIMILARITY_THRESHOLD &&
+               calculate_mahalanobis_distance(refined_point, current_view_point) < SIMILARITY_THRESHOLD) {
+                connected_view_point = refined_point;
                 measurement_used[proj_v][proj_u] = true;
             }
         }
