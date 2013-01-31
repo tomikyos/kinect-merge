@@ -20,7 +20,7 @@ set(SRCS
 
 IF(NOT CMAKE_BUILD_TYPE)
     SET(CMAKE_BUILD_TYPE Release CACHE STRING
-        "The type of build. Options are: Debug Release RelWithDebInfo Profile"
+        "The type of build. Options are: Debug Release RelWithDebInfo"
         FORCE)
 ENDIF(NOT CMAKE_BUILD_TYPE)
 
@@ -29,7 +29,6 @@ SET(COMMON_FLAGS "-Wall -Wextra")
 if(CMAKE_COMPILER_IS_GNUCXX)
     set(CMAKE_CXX_FLAGS_RELEASE "${COMMON_FLAGS} -O3 -DNDEBUG")
     set(CMAKE_CXX_FLAGS_DEBUG "${COMMON_FLAGS} -O0 -ggdb -DDEBUG")
-    set(CMAKE_CXX_FLAGS_PROFILE "${COMMON_FLAGS} -O3 -DNDEBUG -pg")
     set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "${COMMON_FLAGS} -O3 -ggdb -DNDEBUG")
 endif()
 
