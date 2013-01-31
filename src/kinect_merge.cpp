@@ -294,7 +294,7 @@ int main(int argc, const char **argv) {
         // Collect statistics.
         float num_pixels = IMAGE_WIDTH * IMAGE_HEIGHT;
         time_merging_stats.push_back(timer.elapsed());
-        num_missing_stats.push_back(view.get_num_missing() / num_pixels * 100);
+        num_missing_stats.push_back(view.get_num_missing());
         if(outlier_rejection) {
             num_outliers_stats.push_back(view.get_num_outliers() / (num_pixels - view.get_num_missing()) * 100);
         }
@@ -366,12 +366,13 @@ int main(int argc, const char **argv) {
     output_point_cloud<CPoint::ptr>(global_point_cloud, output_file);
 
     // Output statistics.
-    unsigned int num_original_points = views.size() * IMAGE_WIDTH * IMAGE_HEIGHT - sum(num_missing_stats);
+    unsigned int num_pixels = IMAGE_WIDTH * IMAGE_HEIGHT;
+    unsigned int num_original_points = (last_view - first_view) * num_pixels - sum(num_missing_stats);
     unsigned int num_resulting_points = global_point_cloud.size();
     std::cout << "Statistics:" << std::endl;
     std::cout << "Loading views: avg " << time_loading_stat / views.size() << " s" << std::endl;
     std::cout << "Merging views: avg " << average(time_merging_stats) << " s, min " << minimum(time_merging_stats) << " s, max " << maximum(time_merging_stats) << " s" << std::endl;
-    std::cout << "Missing measurements: avg " << average(num_missing_stats) << " %, min " << minimum(num_missing_stats) << " %, max " << maximum(num_missing_stats) << " %" << std::endl;
+    std::cout << "Missing measurements: avg " << average(num_missing_stats) / num_pixels * 100 << " %, min " << minimum(num_missing_stats) / num_pixels * 100 << " %, max " << maximum(num_missing_stats) / num_pixels * 100 << " %" << std::endl;
     if(outlier_rejection) {
         std::cout << "Rejected measurements: avg " << average(num_outliers_stats) << " %, min " << minimum(num_outliers_stats) << " %, max " << maximum(num_outliers_stats) << " %" << std::endl;
     }
