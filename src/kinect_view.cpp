@@ -171,8 +171,8 @@ void CView::to_image_plane(const cv::Matx41f &local_pos, int &uc, int &vc) const
     vc = cf(1) + 0.5;
 }
 
-static float calculate_mahalanobis_distance(const CPoint &estimate, const CPoint &p) {
-    cv::Matx<float, 1, 1> operand = (p.pos - estimate.pos).t() * p.cov.inv() * (p.pos - estimate.pos);
+static float calculate_mahalanobis_distance(const CPoint &refined_point, const CPoint &p) {
+    cv::Matx<float, 1, 1> operand = (p.pos - refined_point.pos).t() * p.cov.inv() * (p.pos - refined_point.pos);
     return sqrt(operand(0));
 }
 
@@ -288,7 +288,7 @@ static void refine_point(const CPoint &existing_point, const CPoint &new_measure
     refined_point.cov = (existing_point.cov.inv() + new_measurement_cov_inv).inv();
 
     // Calculate the refined position estimate.
-    refined_point.pos = existing_point.pos + estimate.cov * new_measurement_cov_inv * (new_measurement.pos - existing_point.pos);
+    refined_point.pos = existing_point.pos + refined_point.cov * new_measurement_cov_inv * (new_measurement.pos - existing_point.pos);
 
     // Add the color values.
     refined_point.col_sum = existing_point.col_sum + new_measurement.col_sum;
@@ -362,7 +362,7 @@ void CView::project(const CPoint &global_point, int &proj_u, int &proj_v, float 
     }
 }
 
-void CView::merge(boost::ptr_vector<CView> views,
+void CView::merge(boost::ptr_vector<CView> &views,
                   unsigned int view_idx,
                   const cv::Mat view_connectivity,
                   bool outlier_rejection,

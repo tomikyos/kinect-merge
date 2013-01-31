@@ -62,7 +62,7 @@ public:
     void project(const CPoint &global_point, int &proj_u, int &proj_v, float &proj_depth) const;
 
     // Add the points of this view to the point cloud.
-    void merge(boost::ptr_vector<CView> views,
+    void merge(boost::ptr_vector<CView> &views,
                unsigned int view_idx,
                const cv::Mat view_connectivity,
                bool outlier_rejection,
