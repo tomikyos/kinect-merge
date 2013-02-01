@@ -4,59 +4,32 @@ Merging Kinect depth maps into a nonredundant point cloud
 Summary
 -------
 
-The program takes a sequence of registered frames captured with the Kinect depth
-camera and outputs a nonredundant point cloud. The algorithm uses covariance
-matrices to describe the directional variance of the measurements, it does not
-limit the captured volume, it allows for varying levels of detail, and it
-doesn't require any parameters from the user. It is partially based on a paper
-by Merrell et al. [1].
+The program takes a sequence of registered views captured with the Kinect depth
+camera and outputs a nonredundant point cloud. The algorithm creates the point
+cloud incrementally and uses overlapping measurements to reduce the directional
+variance of estimated point positions. It does not limit the captured volume, it
+allows for varying levels of detail, and it doesn't require any parameters from
+the user.
 
 Process
 -------
 
-The input to the algorithm is a sequence of *views* which consist of a depth
-map, a color image and extrinsic parameters of the camera. The output is a point
-cloud in the ASCII PLY file format.
+The input to the algorithm is a sequence of views which consist of a depth
+map, a color image and extrinsic parameters of the camera. In addition,
+connectivity information for the views can be supplied to increase
+performance.  The output is a point cloud in the ASCII PLY file format.
 
-The views are processed sequentially in a single pass. For each view, the
-process consists of two steps: outlier rejection followed by point cloud
-refinement. The view being processed is called the *current view*.  Outlier
-rejection utilizes two views before and after the current view. They are called
-the *adjacent views*. Because of this, the first and last two views in the
-sequence are not processed.  They do not have two views before and after them to
-be used for outlier rejection. Also, outlier rejection limits the minimum number
-of views to be five.  The views which see the same part of the scene as the
-current view are called *connected views*.
-
-The Kinect sensor produces outliers at depth discontinuities. The outliers are
-detected and rejected to improve the quality of the resulting point cloud.
-Outlier rejection is based on calculating the *stability* of each point in the
-current view. This is done by counting *occlusions* and *free-space violations*.
-Occlusions are counted by projecting points from adjacent views onto the pixel
-grid of the current view. If a point projects in front of a point in the current
-view, it is an occlusion. A point is said to project in front of another point
-it they both hit the same pixel on the grid and the resulting depth value of the
-projected point is lower than that of the other point. Free-space violations are
-counted by projecting points from the current view onto the pixel grids of all
-adjacent views.  If a point projects in front a point in an adjacent view, it is
-a free-space violation. The stability is defined as the number of free-space
-violations substracted from the number of occlusions. If a point has negative
-stability, it is considered an outlier and is rejected.
-
-If a projected point is similar enough to a point it overlaps, it does not
-contribute to the stability calculation. The similarity metric used is the
-Mahalanobis distance between two points, and the threshold for considering two
-points to be similar enough is three standard deviations.
-
-After outliers have been rejected, existing points in the cloud are refined
-using the new points from the current view. This is done by projecting points
-from previously processed connected views onto the pixel grid of the current
-view. If a projected point hits the same pixel as a new point in the current
-view and is similar enough to it, the new point is used to refine the estimate
-for the existing point taking into account the directional variances of the
-points.  The similarity is determined as described previously. Points which are
-not used to refine existing points are added to the resulting point cloud as
-they are.
+The views are processed sequentially in a single pass. When a new view is being
+added, existing points from the cloud are projected onto the pixel grid of the
+new view. If a new measurement resides near existing points, a new estimate is
+created for each existing point with the best linear unbiased estimator (BLUE).
+Then, the Mahalanobis distances from the new estimate to both the existing point
+and new measurement is calculated. If both distances are smaller than a threshold,
+the existing point in the cloud is replaced with the new estimate. This results
+in reduced variance for the point with no added redundancy in the cloud. If the
+distance condition is not met for any new estimate (i.e. the new measurement
+wasn't used to refine any existing point), the measurement represents a novel
+point of surface and is added to the cloud as a new point.
 
 Prerequisites
 -------------
@@ -107,6 +80,8 @@ current directory.
 
         -c [ --connectivity ] FILE      The camera connectivity matrix.
         -d [ --debug ]                  Output additional debug files.
+        --covscalexy FACTOR             Scale factor for measurement x- and y-variances (default: 40).
+        --covscalez FACTOR              Scale factor for measurement z-variance (default: 20).
 
 The connectivity matrix is an NxN symmetric logical matrix in the OpenCV YAML
 format. In this matrix, the value in row Y, column X indicates whether the
@@ -114,11 +89,10 @@ corresponding views see the same portion of the scene. If no connectivity matrix
 is supplied, a matrix full of ones is used (i.e. all views are considered to be
 connected to each other).
 
+The covariance scaling options are supplied for accounting for error resulting
+from view alignment.  The default values are suitable for the alignment process
+used for included data set. The scale factors should not be data set specific.
+
 ### Example
 
     $ build/kinect_merge dataset-office office.ply
-
-References
-----------
-
-[1] Real-time visibility-based fusion of depth maps (P Merrell, A Akbarzadeh, L Wang..., 2007)
