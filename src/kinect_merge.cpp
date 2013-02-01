@@ -45,7 +45,6 @@ static void parse_options(int argc, const char **argv, po::variables_map &vm) {
                                 "scale factor for measurement z-variance")
         ("connectivity,c",      boost::program_options::value<std::string>(),
                                 "OpenCV YAML file containing the view connectivity matrix C")
-        ("outlierrejection,o",  "enable outlier rejection")
         ("debug,d",             "output debug files")
         ("capture_dir",         "directory to read the capture data from")
         ("output_file",         "PLY file to write the resulting point cloud to");
@@ -193,13 +192,11 @@ int main(int argc, const char **argv) {
     std::string output_file = vm["output_file"].as<std::string>();
     float covariance_scale_xy = vm["covscalexy"].as<float>();
     float covariance_scale_z = vm["covscalez"].as<float>();
-    bool outlier_rejection = vm.count("outlierrejection");
 
     // Statistics variables
     float time_loading_stat;
     std::vector<float> time_merging_stats;
     std::vector<float> num_missing_stats;
-    std::vector<float> num_outliers_stats;
     std::vector<float> num_added_stats;
 
     if(!boost::filesystem::exists("calib.yml")) {
@@ -217,16 +214,8 @@ int main(int argc, const char **argv) {
     time_loading_stat = timer.elapsed();
     std::cout << views.size() << " views" << std::endl;
 
-    if(outlier_rejection) {
-        // Each view must have two views on each side for the outlier rejection step.
-        if(views.size() < 2 * ADJACENCY_SIZE + 1) {
-            std::cerr << "Need at least " << 2 * ADJACENCY_SIZE + 1 << " views" << std::endl;
-            exit(3);
-        }
-    }
-
-    unsigned int first_view = outlier_rejection ? ADJACENCY_SIZE : 0;
-    unsigned int last_view = outlier_rejection ? views.size() - ADJACENCY_SIZE : views.size();
+    unsigned int first_view = 0;
+    unsigned int last_view = views.size();
 
     if(debug) {
         // Output all the points overlayed in one cloud.
@@ -234,11 +223,7 @@ int main(int argc, const char **argv) {
         std::cout << "Overlaying point clouds" << std::endl;
 
         for(unsigned int i = first_view; i < last_view; i++) {
-            if(outlier_rejection) {
-                print_progress(i - ADJACENCY_SIZE, views.size() - 2 * ADJACENCY_SIZE);
-            } else {
-                print_progress(i, views.size());
-            }
+            print_progress(i, views.size());
             views[i].insert_into_point_cloud(overlayed_point_cloud);
         }
         output_point_cloud<CPoint::const_ptr>(overlayed_point_cloud, "overlayed.ply");
@@ -277,28 +262,20 @@ int main(int argc, const char **argv) {
     std::cout << "Merging views" << std::endl;
     std::vector<CPoint::ptr> global_point_cloud;
     for(unsigned int view_idx = first_view; view_idx < last_view; view_idx++) {
-        if(outlier_rejection) {
-            print_progress(view_idx - ADJACENCY_SIZE, views.size() - 2 * ADJACENCY_SIZE);
-        } else {
-            print_progress(view_idx, views.size());
-        }
+        print_progress(view_idx, views.size());
 
         timer.restart();
         CView &view = views[view_idx];
         view.merge(views,
                    view_idx,
                    view_connectivity,
-                   outlier_rejection,
                    global_point_cloud);
 
         // Collect statistics.
         float num_pixels = IMAGE_WIDTH * IMAGE_HEIGHT;
         time_merging_stats.push_back(timer.elapsed());
         num_missing_stats.push_back(view.get_num_missing());
-        if(outlier_rejection) {
-            num_outliers_stats.push_back(view.get_num_outliers() / (num_pixels - view.get_num_missing()) * 100);
-        }
-        num_added_stats.push_back(view.get_num_added() / (num_pixels - view.get_num_missing() - view.get_num_outliers()) * 100);
+        num_added_stats.push_back(view.get_num_added() / (num_pixels - view.get_num_missing()) * 100);
 
 #ifdef DEBUG
         if(debug) {
@@ -336,16 +313,11 @@ int main(int argc, const char **argv) {
                             color[0] = 128;
                             color[1] = 255;
                             color[2] = 128;
-                        } else if(view.measurement_accepted[v][u]) {
+                        } else {
                             // The point was added to the cloud.
                             color[0] = 255;
                             color[1] = 128;
                             color[2] = 128;
-                        } else {
-                            // The point was an outlier.
-                            color[0] = 128;
-                            color[1] = 128;
-                            color[2] = 255;
                         }
                     } else {
                         // There was no measurement for the pixel.
@@ -373,9 +345,6 @@ int main(int argc, const char **argv) {
     std::cout << "Loading views: avg " << time_loading_stat / views.size() << " s" << std::endl;
     std::cout << "Merging views: avg " << average(time_merging_stats) << " s, min " << minimum(time_merging_stats) << " s, max " << maximum(time_merging_stats) << " s" << std::endl;
     std::cout << "Missing measurements: avg " << average(num_missing_stats) / num_pixels * 100 << " %, min " << minimum(num_missing_stats) / num_pixels * 100 << " %, max " << maximum(num_missing_stats) / num_pixels * 100 << " %" << std::endl;
-    if(outlier_rejection) {
-        std::cout << "Rejected measurements: avg " << average(num_outliers_stats) << " %, min " << minimum(num_outliers_stats) << " %, max " << maximum(num_outliers_stats) << " %" << std::endl;
-    }
     std::cout << "Added points: avg " << average(num_added_stats) << " %, min " << minimum(num_added_stats) << " %, max " << maximum(num_added_stats) << " %" << std::endl;
     std::cout << "Points in the original cloud: " << num_original_points << std::endl;
     std::cout << "Points in the resulting cloud: " << num_resulting_points << std::endl;

@@ -10,12 +10,8 @@
 
 namespace kinect_merge {
 
-// This is used for deciding whether two points are similar enough to not be considered outliers or
-// similar enough to be merged.
+// This is used for deciding whether two points are similar enough to be merged.
 static const float SIMILARITY_THRESHOLD = 3.0f; // in units of standard deviations
-
-// Stability threshold for outlier rejection
-static const int OUTLIER_THRESHOLD = 3;
 
 // Measurement variance constants
 static const float ALPHA_0 = 0.0032225f;
@@ -51,10 +47,8 @@ CView::CView(const std::string &extrinsic_file,
     original_pointmap(boost::extents[IMAGE_HEIGHT][IMAGE_WIDTH]),
     pointmap(boost::extents[IMAGE_HEIGHT][IMAGE_WIDTH]),
     num_missing(0),
-    num_outliers(0),
-#ifdef DEBUG // These are used for outputting debug images.
+#ifdef DEBUG // The measurement_used vector is used for outputting debug images.
     num_added(0),
-    measurement_accepted(IMAGE_HEIGHT),
     measurement_used(IMAGE_HEIGHT) {
 #else
     num_added(0) {
@@ -176,110 +170,6 @@ static float calculate_mahalanobis_distance(const CPoint &refined_point, const C
     return sqrt(operand(0));
 }
 
-void CView::reject_outliers(boost::ptr_vector<CView> views,
-                            unsigned int view_idx,
-                            std::vector<std::vector<bool> > &measurement_accepted) {
-    std::vector<std::vector<int> > measurement_stability(IMAGE_HEIGHT);
-    for(int v = 0; v < IMAGE_HEIGHT; v++) {
-        measurement_stability[v].resize(IMAGE_WIDTH);
-        for(int u = 0; u < IMAGE_WIDTH; u++) {
-            measurement_stability[v][u] = 0;
-        }
-    }
-
-    // Project adjacent views into the current view to calculate the number of occlusions for each pixel.
-    for(unsigned int adjacent_idx = view_idx - ADJACENCY_SIZE;
-        adjacent_idx <= view_idx + ADJACENCY_SIZE;
-        adjacent_idx++) {
-        assert(adjacent_idx < views.size());
-        if(adjacent_idx == view_idx) {
-            continue;
-        }
-
-        CView &adjacent_view = views[adjacent_idx];
-
-        for(int v = 0; v < IMAGE_HEIGHT; v++) {
-            for(int u = 0; u < IMAGE_WIDTH; u++) {
-                if(!adjacent_view.has_measurement(u, v)) {
-                    continue;
-                }
-
-                // Project the point onto the current view image plane.
-                int proj_u, proj_v;
-                float proj_depth;
-                const CPoint &adjacent_view_point = adjacent_view.get_original_point(u, v);
-                project(adjacent_view_point, proj_u, proj_v, proj_depth);
-
-                if(proj_depth < 0) {
-                    // The point projects outside the image plane.
-                    continue;
-                }
-
-                if(has_measurement(proj_u, proj_v)) {
-                    const CPoint &current_view_point = get_original_point(proj_u, proj_v);
-                    float distance = calculate_mahalanobis_distance(adjacent_view_point,
-                                                                    current_view_point);
-                    if(distance > SIMILARITY_THRESHOLD && proj_depth < get_depth(proj_u, proj_v)) {
-                        // The projected point occludes a pixel in the current view.
-                        measurement_stability[proj_v][proj_u]++;
-                    }
-                }
-            }
-        }
-    }
-
-    // Project the current view into the adjacent views to count the number of free-space
-    // violations for each pixel.
-    for(int v = 0; v < IMAGE_HEIGHT; v++) {
-        for(int u = 0; u < IMAGE_WIDTH; u++) {
-            if(!has_measurement(u, v)) {
-                continue;
-            }
-
-            int &stability = measurement_stability[v][u];
-
-            // Count the number of free-space violations by projecting into the adjacent views.
-            for(unsigned int adjacent_idx = view_idx - ADJACENCY_SIZE;
-                adjacent_idx <= view_idx + ADJACENCY_SIZE;
-                adjacent_idx++) {
-                assert(adjacent_idx < views.size());
-                if(adjacent_idx == view_idx) {
-                    continue;
-                }
-
-                CView &adjacent_view = views[adjacent_idx];
-
-                int proj_u, proj_v;
-                float proj_depth;
-                const CPoint &current_view_point = get_original_point(u, v);
-                adjacent_view.project(current_view_point, proj_u, proj_v, proj_depth);
-
-                if(proj_depth < 0) {
-                    // The point projects outside the image plane.
-                    continue;
-                }
-
-                if(adjacent_view.has_measurement(proj_u, proj_v)) {
-                    const CPoint &adjacent_view_point = adjacent_view.get_original_point(proj_u, proj_v);
-                    float distance = calculate_mahalanobis_distance(current_view_point,
-                                                                    adjacent_view_point);
-                    if(distance > SIMILARITY_THRESHOLD && proj_depth < adjacent_view.get_depth(proj_u, proj_v)) {
-                        // There is a free-space violation.
-                        stability--;
-                    }
-                }
-
-                if(abs(stability) >= OUTLIER_THRESHOLD) {
-                    // The current view measurement is unstable and therefore an outlier.
-                    measurement_accepted[v][u] = false;
-                    num_outliers++;
-                    break;
-                }
-            }
-        }
-    }
-}
-
 // Calculate a new position estimate, covariance matrix and color for an existing point given a new measurement.
 static void refine_point(const CPoint &existing_point, const CPoint &new_measurement, CPoint &refined_point) {
     cv::Matx33f new_measurement_cov_inv = new_measurement.cov.inv();
@@ -295,9 +185,7 @@ static void refine_point(const CPoint &existing_point, const CPoint &new_measure
     refined_point.num_merged = existing_point.num_merged + new_measurement.num_merged;
 }
 
-void CView::refine_points(CView &connected_view,
-                          const std::vector<std::vector<bool> > &measurement_accepted,
-                          std::vector<std::vector<bool> > &measurement_used) const {
+void CView::refine_points(CView &connected_view, std::vector<std::vector<bool> > &measurement_used) const {
     for(int v = 0; v < IMAGE_HEIGHT; v++) {
         for(int u = 0; u < IMAGE_WIDTH; u++) {
             if(!connected_view.has_point(u, v)) {
@@ -305,6 +193,10 @@ void CView::refine_points(CView &connected_view,
             }
 
             // Project the point onto the current view image plane.
+            // NOTE: Only points which were added to cloud from the connected view are projected.
+            // Each point in the cloud is pointed to by exactly one view. This means that a single
+            // point in the cloud will NOT be refined multiple times with the same new measurement
+            // through different connected views.
             int proj_u, proj_v;
             float proj_depth;
             CPoint &connected_view_point = connected_view.get_point(u, v);
@@ -315,7 +207,7 @@ void CView::refine_points(CView &connected_view,
                 continue;
             }
 
-            if(!has_measurement(proj_u, proj_v) || !measurement_accepted[proj_v][proj_u]) {
+            if(!has_measurement(proj_u, proj_v)) {
                 // There is nothing to merge with at this pixel.
                 continue;
             }
@@ -365,27 +257,18 @@ void CView::project(const CPoint &global_point, int &proj_u, int &proj_v, float 
 void CView::merge(boost::ptr_vector<CView> &views,
                   unsigned int view_idx,
                   const cv::Mat view_connectivity,
-                  bool outlier_rejection,
                   std::vector<CPoint::ptr> &global_point_cloud) {
     // Initialize vectors.
-    // A measurement is marked as accepted if it is not an outlier.
     // A measurement is marked as used if an existing point is refined with it.
 #ifndef DEBUG
     // Use a local variable instead of a member variable.
-    std::vector<std::vector<bool> > measurement_accepted(IMAGE_HEIGHT);
     std::vector<std::vector<bool> > measurement_used(IMAGE_HEIGHT);
 #endif
     for(int v = 0; v < IMAGE_HEIGHT; v++) {
-        measurement_accepted[v].resize(IMAGE_WIDTH);
         measurement_used[v].resize(IMAGE_WIDTH);
         for(int u = 0; u < IMAGE_WIDTH; u++) {
-            measurement_accepted[v][u] = true;
             measurement_used[v][u] = false;
         }
-    }
-
-    if(outlier_rejection) {
-        reject_outliers(views, view_idx, measurement_accepted);
     }
 
     // Project all connected views into the current view to find points to be refined.
@@ -397,17 +280,15 @@ void CView::merge(boost::ptr_vector<CView> &views,
 
         CView &connected_view = views[connected_idx];
 
-        refine_points(connected_view, measurement_accepted, measurement_used);
+        refine_points(connected_view, measurement_used);
     }
 
     // Add all the points that weren't used to refine existing points to the point cloud.
     for(int v = 0; v < IMAGE_HEIGHT; v++) {
         for(int u = 0; u < IMAGE_WIDTH; u++) {
             if(has_measurement(u, v)) {
-                if(measurement_accepted[v][u] && !measurement_used[v][u]) {
-                    // Insert a copy into the point cloud since the original will be used for
-                    // outlier rejection.
-                    pointmap[v][u] = boost::make_shared<CPoint>(*original_pointmap[v][u]);
+                if(!measurement_used[v][u]) {
+                    pointmap[v][u] = original_pointmap[v][u];
                     global_point_cloud.push_back(pointmap[v][u]);
                     num_added++;
                 }

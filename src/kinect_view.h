@@ -65,27 +65,18 @@ public:
     void merge(boost::ptr_vector<CView> &views,
                unsigned int view_idx,
                const cv::Mat view_connectivity,
-               bool outlier_rejection,
                std::vector<CPoint::ptr> &global_point_cloud);
 
     // Statistics
     int get_num_missing() const { return num_missing; }
-    int get_num_outliers() const { return num_outliers; }
     int get_num_added() const { return num_added; }
 
 private:
     // Project a local point onto the image plane of this view.
     void to_image_plane(const cv::Matx41f &local_pos, int &uc, int &vc) const;
 
-    // Detect and mark outliers as rejected.
-    void reject_outliers(boost::ptr_vector<CView> views,
-                         unsigned int view_idx,
-                         std::vector<std::vector<bool> > &measurement_accepted);
-
     // Update existing points in the connected views using new measurements that are similar enough.
-    void refine_points(CView &connected_view,
-                       const std::vector<std::vector<bool> > &measurement_accepted,
-                       std::vector<std::vector<bool> > &measurement_used) const;
+    void refine_points(CView &connected_view, std::vector<std::vector<bool> > &measurement_used) const;
 
     CKinectCalibration& calibration;
 
@@ -93,8 +84,9 @@ private:
     cv::Matx<float, IMAGE_HEIGHT, IMAGE_WIDTH> depthmap;
 
     // Contains the global points backprojected from the original depthmap.
+    // These might have been refined by later measurements.
     // Has dimensions IMAGE_HEIGHTxIMAGE_WIDTH.
-    boost::multi_array<CPoint::const_ptr, 2> original_pointmap;
+    boost::multi_array<CPoint::ptr, 2> original_pointmap;
 
     // Contains the global points added to the point cloud from this view.
     // These might have been refined by later measurements.
@@ -103,13 +95,11 @@ private:
 
     // Statistics
     int num_missing;
-    int num_outliers;
     int num_added;
 
 #ifdef DEBUG
 public:
-    // These are used for outputting debug images.
-    std::vector<std::vector<bool> > measurement_accepted;
+    // This is used for outputting debug images.
     std::vector<std::vector<bool> > measurement_used;
 #endif
 };
