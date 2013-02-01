@@ -1,5 +1,5 @@
 Merging Kinect depth maps into a nonredundant point cloud
-============================================
+=========================================================
 
 Summary
 -------
@@ -96,3 +96,16 @@ used for included data set. The scale factors should not be data set specific.
 ### Example
 
     $ build/kinect_merge dataset-office office.ply
+
+Statistics
+----------
+
+Some statistics related to the supplied office data set when processed on
+a 2 GHz Intel Core 2 processor:
+
+    View count:                                    22
+    Point count of a redundant cloud:       5 315 546
+    Point count of a nonredundant cloud:      823 659
+    Ratio of reduction:                          85 %
+    Mean merging time per view:                0.21 s
+    Peak memory usage:                        809 MiB
