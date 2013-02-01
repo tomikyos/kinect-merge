@@ -39,13 +39,13 @@ static void parse_options(int argc, const char **argv, po::variables_map &vm) {
     po::options_description desc;
     desc.add_options()
         ("help,h",              "display this help and exit")
-        ("covscalexy,sxy",      boost::program_options::value<float>()->default_value(DEFAULT_COVARIANCE_SCALE_XY),
-                                "scale factor for measurement x- and y-variances")
-        ("covscalez,sz",        boost::program_options::value<float>()->default_value(DEFAULT_COVARIANCE_SCALE_Z),
-                                "scale factor for measurement z-variance")
         ("connectivity,c",      boost::program_options::value<std::string>(),
                                 "OpenCV YAML file containing the view connectivity matrix C")
         ("debug,d",             "output debug files")
+        ("covscalexy",          boost::program_options::value<float>()->default_value(DEFAULT_COVARIANCE_SCALE_XY),
+                                "scale factor for measurement x- and y-variances")
+        ("covscalez",           boost::program_options::value<float>()->default_value(DEFAULT_COVARIANCE_SCALE_Z),
+                                "scale factor for measurement z-variance")
         ("capture_dir",         "directory to read the capture data from")
         ("output_file",         "PLY file to write the resulting point cloud to");
 
